@@ -18,6 +18,8 @@ struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @State private var showAddExpense = false
     @State private var showFilter = false
+    @State private var showDeleteAlert = false
+    @State private var selectedExpense: Expense?
     
     var body: some View {
         NavigationStack {
@@ -75,6 +77,19 @@ struct HomeView: View {
                     SummaryView(expenses: expenses)
                 }
             }
+            .alert("Delete Expense", isPresented: $showDeleteAlert) {
+                
+                Button("Delete", role: .destructive) {
+                    if let expense = selectedExpense {
+                        viewModel.deleteExpense(expense, context: context)
+                    }
+                }
+                
+                Button("Cancel", role: .cancel) { }
+                
+            } message: {
+                Text("Are you sure you want to delete this expense?")
+            }
         }
     }
 }
@@ -109,14 +124,10 @@ extension HomeView {
             ForEach(viewModel.filteredExpenses(from: expenses)) { expense in
                 
                 ExpenseRow(expense: expense)
-                    .swipeActions {
-                        
-                        Button(role: .destructive) {
-                            viewModel.deleteExpense(expense, context: context)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+                    .onLongPressGesture {
+                            selectedExpense = expense
+                            showDeleteAlert = true
                         }
-                    }
             }
         }
     }

@@ -14,27 +14,46 @@ final class AddExpenseViewModel: ObservableObject {
     
     @Published var title: String = ""
     @Published var amount: String = ""
-    @Published var category: String = "Food"
+    @Published var category: String = ExpenseCategory.food.rawValue
     @Published var date: Date = .now
-    
-    let categories = [
-        "Food",
-        "Transport",
-        "Shopping",
-        "Bills",
-        "Entertainment",
-        "Other"
-    ]
-    
-    var isValid: Bool {
-        !title.isEmpty && Double(amount) != nil
+    @Published private(set) var isSaving = false
+    @Published var errorMessage: String?
+
+    private let expenseService: ExpenseService
+    private let existingExpense: Expense?
+
+    init(expenseService: ExpenseService, expense: Expense? = nil) {
+        self.expenseService = expenseService
+        self.existingExpense = expense
+        if let expense {
+            title = expense.name
+            amount = String(expense.amount)
+            category = expense.category
+            date = expense.date
+        }
     }
     
-    func saveExpense(context: ModelContext) {
-        guard let amountValue = Double(amount) else { return }
-        
-        let expense = Expense(name: title, category: category, date: date, value: amountValue)
-        
-        context.insert(expense)
+    var isValid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (Double(amount) ?? 0) > 0
+    }
+
+    func saveExpense() async -> ExpenseDTO? {
+        guard isValid, !isSaving, let amountValue = Double(amount) else { return nil }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let expense: ExpenseDTO
+            if let remoteID = existingExpense?.remoteID {
+                expense = try await expenseService.updateExpense(id: remoteID, name: cleanedTitle, category: category, amount: amountValue, date: date)
+            } else {
+                expense = try await expenseService.createExpense(name: cleanedTitle, category: category, amount: amountValue, date: date)
+            }
+            errorMessage = nil
+            return expense
+        } catch {
+            errorMessage = APIError.map(error).userMessage
+            return nil
+        }
     }
 }

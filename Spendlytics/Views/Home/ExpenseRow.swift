@@ -10,6 +10,7 @@ import SwiftUI
 struct ExpenseRow: View {
     
     let expense: Expense
+    var isDeleting = false
     
     var body: some View {
         
@@ -20,7 +21,7 @@ struct ExpenseRow: View {
                 Text(expense.name)
                     .font(.headline)
                 
-                Text(expense.category)
+                Text(ExpenseCategory.displayName(for: expense.category))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -36,6 +37,12 @@ struct ExpenseRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            ZStack {
+                if isDeleting { ProgressView() }
+            }
+            .frame(width: 20, height: 20)
+            .padding(.leading, 4)
         }
         .padding()
         .background(.background)

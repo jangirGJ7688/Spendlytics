@@ -62,8 +62,8 @@ extension FilterView {
                 
                 Text("All").tag(String?.none)
                 
-                ForEach(viewModel.categories, id: \.self) {
-                    Text($0).tag(Optional($0))
+                ForEach(viewModel.categories, id: \.self) { category in
+                    Text(ExpenseCategory.displayName(for: category)).tag(Optional(category))
                 }
             }
         }

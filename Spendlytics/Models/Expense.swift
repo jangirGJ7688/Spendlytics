@@ -11,13 +11,17 @@ import Foundation
 @Model
 final class Expense {
     var id: UUID
+    var remoteID: Int64?
+    var ownerScope: String?
     var name: String
     var category: String
     var date: Date
     var amount: Double
     
-    init(id: UUID = UUID(), name: String, category: String, date: Date, value: Double) {
+    init(id: UUID = UUID(), remoteID: Int64? = nil, ownerScope: String? = nil, name: String, category: String, date: Date, value: Double) {
         self.id = id
+        self.remoteID = remoteID
+        self.ownerScope = ownerScope
         self.name = name
         self.category = category
         self.date = date

@@ -25,7 +25,7 @@ final class SummaryViewModel: ObservableObject {
             let total = expenses.reduce(0) { $0 + $1.amount }
             
             return CategoryExpense(
-                category: category,
+                category: ExpenseCategory.displayName(for: category),
                 amount: total
             )
         }
@@ -128,7 +128,7 @@ final class SummaryViewModel: ObservableObject {
             }
             
         } catch {
-            print(error)
+            insights = []
         }
     }
 }

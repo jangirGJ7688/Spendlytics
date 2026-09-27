@@ -11,17 +11,22 @@ import Combine
 
 @MainActor
 final class HomeViewModel: ObservableObject {
-    
+    @Published private(set) var isLoading = false
+    @Published var errorMessage: String?
+    @Published private(set) var currentPage = 0
+    @Published private(set) var hasMorePages = false
+    @Published private(set) var lastLoadedRemoteID: Int64?
+    @Published private(set) var deletingExpenseID: UUID?
+
+    private let expenseService: ExpenseService
+
+    init(expenseService: ExpenseService) {
+        self.expenseService = expenseService
+    }
+
     @Published var filter = ExpenseFilter()
     
-    let categories = [
-        "Food",
-        "Transport",
-        "Shopping",
-        "Bills",
-        "Entertainment",
-        "Other"
-    ]
+    var categories: [String] { ExpenseCategory.allCases.map(\.rawValue) }
     
     var hasActiveFilters: Bool {
         
@@ -89,7 +94,56 @@ final class HomeViewModel: ObservableObject {
             .reduce(0) { $0 + $1.amount }
     }
     
-    func deleteExpense(_ expense: Expense, context: ModelContext) {
-        context.delete(expense)
+    func loadExpenses(context: ModelContext, page: Int = 0, ownerScope: String) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let response = try await expenseService.fetchExpenses(page: page, size: 10)
+            let stored = try context.fetch(FetchDescriptor<Expense>())
+            for item in response.content {
+                if let existing = stored.first(where: { $0.remoteID == item.id && $0.ownerScope == ownerScope }) {
+                    existing.name = item.name
+                    existing.category = item.category
+                    existing.amount = item.amount
+                    existing.date = item.date
+                } else {
+                    context.insert(Expense(remoteID: item.id, ownerScope: ownerScope, name: item.name, category: item.category, date: item.date, value: item.amount))
+                }
+            }
+            currentPage = response.page
+            hasMorePages = !response.last
+            lastLoadedRemoteID = response.content.last?.id
+            errorMessage = nil
+        } catch {
+            errorMessage = APIError.map(error).userMessage
+        }
+    }
+
+    func loadNextPage(context: ModelContext, ownerScope: String) async {
+        guard hasMorePages else { return }
+        await loadExpenses(context: context, page: currentPage + 1, ownerScope: ownerScope)
+    }
+
+    func shouldLoadNextPage(for expense: Expense) -> Bool {
+        guard let remoteID = expense.remoteID else { return false }
+        return hasMorePages && remoteID == lastLoadedRemoteID
+    }
+
+    func deleteExpense(_ expense: Expense, context: ModelContext) async {
+        guard !isLoading else { return }
+        isLoading = true
+        deletingExpenseID = expense.id
+        defer { isLoading = false }
+        defer { deletingExpenseID = nil }
+        do {
+            if let remoteID = expense.remoteID {
+                try await expenseService.deleteExpense(id: remoteID)
+            }
+            context.delete(expense)
+            errorMessage = nil
+        } catch {
+            errorMessage = APIError.map(error).userMessage
+        }
     }
 }

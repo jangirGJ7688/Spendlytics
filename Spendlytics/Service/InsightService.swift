@@ -8,14 +8,15 @@
 import Foundation
 
 class InsightService {
-    
-    private let apiKey: String = "AIzaSyC98G5VLl9I8emFl4DhhLVBT6E5tQe3W3w"
-    
+
     func generateInsights(prompt: String) async throws -> [String] {
-        
-        let url = URL(string:
-                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=\(apiKey)")!
-        
+        guard let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"], !apiKey.isEmpty else {
+            return []
+        }
+        var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent")
+        components?.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        guard let url = components?.url else { throw APIError.invalidResponse }
+
         let body = InsightRequest(
             contents: [
                 Content(parts: [Part(text: prompt)])
@@ -33,14 +34,9 @@ class InsightService {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        // Check HTTP response
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            
-            let errorResponse = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw NSError(domain: "GeminiAPI", code: 0, userInfo: [
-                NSLocalizedDescriptionKey: errorResponse
-            ])
+            throw APIError.invalidResponse
         }
         
         let decoded = try JSONDecoder().decode(InsightResponse.self, from: data)

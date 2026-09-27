@@ -12,14 +12,25 @@ struct HomeView: View {
     
     @Environment(\.modelContext) private var context
     
-    @Query(sort: \Expense.date, order: .reverse)
+    @Query
     private var expenses: [Expense]
     
-    @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var viewModel: HomeViewModel
+    private let expenseService: ExpenseService
+    private let authManager: AuthManager
     @State private var showAddExpense = false
     @State private var showFilter = false
     @State private var showDeleteAlert = false
     @State private var selectedExpense: Expense?
+    @State private var expenseToEdit: Expense?
+
+    init(expenseService: ExpenseService, authManager: AuthManager) {
+        self.expenseService = expenseService
+        self.authManager = authManager
+        _viewModel = StateObject(wrappedValue: HomeViewModel(expenseService: expenseService))
+        let ownerScope = authManager.cacheScope ?? ""
+        _expenses = Query(filter: #Predicate<Expense> { $0.ownerScope == ownerScope }, sort: \Expense.date, order: .reverse)
+    }
     
     var body: some View {
         NavigationStack {
@@ -39,6 +50,19 @@ struct HomeView: View {
                 prompt: "Search expenses"
             )
             .navigationTitle("Expenses")
+            .overlay {
+                if viewModel.isLoading && expenses.isEmpty { ProgressView() }
+            }
+            .task {
+                if let ownerScope = authManager.cacheScope {
+                    await viewModel.loadExpenses(context: context, ownerScope: ownerScope)
+                }
+            }
+            .refreshable {
+                if let ownerScope = authManager.cacheScope {
+                    await viewModel.loadExpenses(context: context, ownerScope: ownerScope)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -49,7 +73,17 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showAddExpense) {
-                AddExpenseView()
+                AddExpenseView(expenseService: expenseService) { savedExpense in
+                    context.insert(Expense(remoteID: savedExpense.id, ownerScope: authManager.cacheScope, name: savedExpense.name, category: savedExpense.category, date: savedExpense.date, value: savedExpense.amount))
+                }
+            }
+            .sheet(item: $expenseToEdit) { expense in
+                AddExpenseView(expenseService: expenseService, expense: expense) { updatedExpense in
+                    expense.name = updatedExpense.name
+                    expense.category = updatedExpense.category
+                    expense.amount = updatedExpense.amount
+                    expense.date = updatedExpense.date
+                }
             }
             .toolbar {
                 
@@ -77,11 +111,11 @@ struct HomeView: View {
                     SummaryView(expenses: expenses)
                 }
             }
-            .alert("Delete Expense", isPresented: $showDeleteAlert) {
+            .confirmationDialog("Delete Expense", isPresented: $showDeleteAlert, titleVisibility: .visible) {
                 
                 Button("Delete", role: .destructive) {
                     if let expense = selectedExpense {
-                        viewModel.deleteExpense(expense, context: context)
+                        Task { await viewModel.deleteExpense(expense, context: context) }
                     }
                 }
                 
@@ -89,6 +123,25 @@ struct HomeView: View {
                 
             } message: {
                 Text("Are you sure you want to delete this expense?")
+            }
+            .alert("Expenses", isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )) {
+                Button("OK") { viewModel.errorMessage = nil }
+            } message: {
+                Text(viewModel.errorMessage ?? "")
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                            authManager.signOut()
+                        }
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                    }
+                }
             }
         }
     }
@@ -123,14 +176,22 @@ extension HomeView {
             
             ForEach(viewModel.filteredExpenses(from: expenses)) { expense in
                 
-                ExpenseRow(expense: expense)
+                ExpenseRow(expense: expense, isDeleting: viewModel.deletingExpenseID == expense.id)
+                    .onTapGesture {
+                        expenseToEdit = expense
+                    }
                     .onLongPressGesture {
                             selectedExpense = expense
                             showDeleteAlert = true
                         }
+                    .onAppear {
+                        if viewModel.shouldLoadNextPage(for: expense) {
+                            if let ownerScope = authManager.cacheScope {
+                                Task { await viewModel.loadNextPage(context: context, ownerScope: ownerScope) }
+                            }
+                        }
+                    }
             }
         }
     }
 }
-
-

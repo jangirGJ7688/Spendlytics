@@ -88,12 +88,7 @@ Spendlytics
 
 1. Clone the repository
 2. Open the project in **Xcode**
-3. Add your **Gemini API Key**
-
-Inside:InsightsService.swift
-Replace:YOUR_API_KEY
-
-with your actual API key. (My APIKey is already deleted)
+3. AI Insights read `GEMINI_API_KEY` from the app launch environment and remain hidden when it is not configured. Set it in the Xcode scheme for local development. Do not add the key to source control or ship it inside the iOS app; production use should proxy Gemini requests through a trusted server.
 
 4. Build and run the app on:
 

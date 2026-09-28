@@ -15,7 +15,13 @@ struct PieChartView<T: Identifiable>: View {
     let label: (T) -> String
     
     var body: some View {
-        
+        let labels = data.map(label)
+        let colors = data.indices.map { index in
+            index < SpendlyticsStyle.categoryColors.count
+                ? SpendlyticsStyle.categoryColors[index]
+                : SpendlyticsStyle.accent
+        }
+
         Chart(data) { item in
             
             SectorMark(
@@ -24,6 +30,9 @@ struct PieChartView<T: Identifiable>: View {
             )
             .foregroundStyle(by: .value("Label", label(item)))
         }
+        .chartForegroundStyleScale(domain: labels, range: colors)
+        .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
+        .font(PoppinsFont.regular(10))
         .frame(height: 250)
     }
 }

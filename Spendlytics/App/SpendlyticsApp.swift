@@ -15,6 +15,7 @@ struct SpendlyticsApp: App {
     @StateObject private var authManager: AuthManager
 
     init() {
+        PoppinsRegistration.registerBundledFonts()
         let tokenStore = KeychainTokenStore()
         let authManager = AuthManager(tokenStore: tokenStore)
         let client = APIClient(tokenStore: tokenStore)
@@ -50,6 +51,9 @@ struct SpendlyticsApp: App {
                     AuthEntryView(authService: authService, authManager: authManager)
                 }
             }
+            .font(PoppinsFont.regular(15))
+            .tint(SpendlyticsStyle.accent)
+            .preferredColorScheme(.light)
             .task {
                 authManager.restoreSession()
             }

@@ -3,18 +3,35 @@ import Security
 
 @MainActor
 protocol TokenStoring {
-    func readToken() throws -> String?
-    func saveToken(_ token: String) throws
-    func deleteToken() throws
+    func readAccessToken() throws -> String?
+    func readRefreshToken() throws -> String?
+    func saveTokens(accessToken: String, refreshToken: String) throws
+    func deleteTokens() throws
 }
 
 @MainActor
 final class KeychainTokenStore: TokenStoring {
     private let service = Bundle.main.bundleIdentifier ?? "Spendlytics"
-    private let account = "jwt"
+    private let accessAccount = "accessToken"
+    private let refreshAccount = "refreshToken"
 
-    func readToken() throws -> String? {
+    func readAccessToken() throws -> String? { try read(account: accessAccount) }
+    func readRefreshToken() throws -> String? { try read(account: refreshAccount) }
+
+    func saveTokens(accessToken: String, refreshToken: String) throws {
+        try save(accessToken, account: accessAccount)
+        try save(refreshToken, account: refreshAccount)
+    }
+
+    func deleteTokens() throws {
+        try delete(account: accessAccount)
+        try delete(account: refreshAccount)
+        try delete(account: "jwt")
+    }
+
+    private func read(account: String) throws -> String? {
         var query = baseQuery
+        query[kSecAttrAccount as String] = account
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -29,11 +46,12 @@ final class KeychainTokenStore: TokenStoring {
         return token
     }
 
-    func saveToken(_ token: String) throws {
+    private func save(_ token: String, account: String) throws {
         let data = Data(token.utf8)
-        let status = SecItemUpdate(baseQuery as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        var query = baseQuery
+        query[kSecAttrAccount as String] = account
+        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
-            var query = baseQuery
             query[kSecValueData as String] = data
             query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             guard SecItemAdd(query as CFDictionary, nil) == errSecSuccess else { throw APIError.storage }
@@ -42,14 +60,16 @@ final class KeychainTokenStore: TokenStoring {
         }
     }
 
-    func deleteToken() throws {
-        let status = SecItemDelete(baseQuery as CFDictionary)
+    private func delete(account: String) throws {
+        var query = baseQuery
+        query[kSecAttrAccount as String] = account
+        let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw APIError.storage }
     }
 
     private var baseQuery: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
-         kSecAttrAccount as String: account]
+        ]
     }
 }

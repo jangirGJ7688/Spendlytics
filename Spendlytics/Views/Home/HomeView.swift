@@ -10,6 +10,8 @@ struct HomeView: View {
     @State private var showAddExpense = false
     @State private var showFilter = false
     @State private var showDeleteAlert = false
+    @State private var showLogoutConfirmation = false
+    @State private var showAccountDeletionConfirmation = false
     @State private var selectedExpense: Expense?
     @State private var expenseToEdit: Expense?
 
@@ -74,6 +76,18 @@ struct HomeView: View {
             } message: {
                 Text("Are you sure you want to delete this expense?")
             }
+            .confirmationDialog("Sign Out", isPresented: $showLogoutConfirmation, titleVisibility: .visible) {
+                Button("Sign Out", role: .destructive) { Task { await signOut() } }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("You can sign back in at any time.")
+            }
+            .confirmationDialog("Delete Account", isPresented: $showAccountDeletionConfirmation, titleVisibility: .visible) {
+                Button("Delete Account", role: .destructive) { Task { await deleteAccount() } }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This permanently deletes your account and cannot be undone.")
+            }
             .alert("Expenses", isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
@@ -95,7 +109,8 @@ struct HomeView: View {
             }
             Spacer()
             Menu {
-                Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { authManager.signOut() }
+                Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { showLogoutConfirmation = true }
+                Button("Delete Account", systemImage: "person.crop.circle.badge.xmark", role: .destructive) { showAccountDeletionConfirmation = true }
             } label: {
                 Image(systemName: "person.crop.circle.fill")
                     .font(.system(size: 39)).symbolRenderingMode(.palette)
@@ -246,5 +261,28 @@ struct HomeView: View {
 
     private func refreshExpenses() async {
         if let ownerScope = authManager.cacheScope { await viewModel.loadExpenses(context: context, ownerScope: ownerScope) }
+    }
+
+    private func signOut() async {
+        let ownerScope = authManager.cacheScope
+        await authManager.logout()
+        clearCachedExpenses(ownerScope: ownerScope)
+    }
+
+    private func deleteAccount() async {
+        let ownerScope = authManager.cacheScope
+        do {
+            try await authManager.deleteAccount()
+            clearCachedExpenses(ownerScope: ownerScope)
+        } catch {
+            viewModel.errorMessage = APIError.map(error).userMessage
+        }
+    }
+
+    private func clearCachedExpenses(ownerScope: String?) {
+        guard let ownerScope else { return }
+        let descriptor = FetchDescriptor<Expense>(predicate: #Predicate { $0.ownerScope == ownerScope })
+        guard let cachedExpenses = try? context.fetch(descriptor) else { return }
+        cachedExpenses.forEach { context.delete($0) }
     }
 }

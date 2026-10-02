@@ -11,17 +11,36 @@ struct LoginRequest: Encodable {
     let password: String
 }
 
-struct LoginResponse: Decodable {
-    let token: String
+struct LoginResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
 
-    private enum CodingKeys: String, CodingKey { case token, accessToken, jwt }
+    private enum CodingKeys: String, CodingKey {
+        case accessToken
+        case token
+        case refreshToken
+    }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        token = try values.decodeIfPresent(String.self, forKey: .token)
-            ?? values.decodeIfPresent(String.self, forKey: .accessToken)
-            ?? values.decode(String.self, forKey: .jwt)
+        accessToken = try values.decodeIfPresent(String.self, forKey: .accessToken)
+            ?? values.decode(String.self, forKey: .token)
+        refreshToken = try values.decode(String.self, forKey: .refreshToken)
     }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(accessToken, forKey: .accessToken)
+        try values.encode(refreshToken, forKey: .refreshToken)
+    }
+}
+
+struct RefreshTokenRequest: Encodable {
+    let refreshToken: String
+}
+
+struct LogoutRequest: Encodable {
+    let refreshToken: String
 }
 
 @MainActor
@@ -36,10 +55,19 @@ final class AuthService {
         try await client.sendWithoutResponse("/auth/register", method: "POST", body: body, authenticated: false)
     }
 
-    func login(email: String, password: String) async throws -> String {
+    func login(email: String, password: String) async throws -> LoginResponse {
         let body = try encoder.encode(LoginRequest(email: email, password: password))
         let response: LoginResponse = try await client.send("/auth/login", method: "POST", body: body, authenticated: false)
-        guard !response.token.isEmpty else { throw APIError.invalidResponse }
-        return response.token
+        guard !response.accessToken.isEmpty, !response.refreshToken.isEmpty else { throw APIError.invalidResponse }
+        return response
+    }
+
+    func logout(refreshToken: String) async throws {
+        let body = try encoder.encode(LogoutRequest(refreshToken: refreshToken))
+        try await client.sendWithoutResponse("/auth/logout", method: "POST", body: body, authenticated: false)
+    }
+
+    func deleteAccount() async throws {
+        try await client.sendWithoutResponse("/auth/account", method: "DELETE")
     }
 }

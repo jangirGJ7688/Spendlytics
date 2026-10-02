@@ -60,8 +60,8 @@ final class AuthViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            let token = try await authService.login(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
-            try authManager.storeSession(token: token)
+            let tokens = try await authService.login(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+            try authManager.storeSession(tokens: tokens)
             password = ""
         } catch {
             errorMessage = APIError.map(error).userMessage

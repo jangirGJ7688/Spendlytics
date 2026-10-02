@@ -17,12 +17,13 @@ struct SpendlyticsApp: App {
     init() {
         PoppinsRegistration.registerBundledFonts()
         let tokenStore = KeychainTokenStore()
-        let authManager = AuthManager(tokenStore: tokenStore)
         let client = APIClient(tokenStore: tokenStore)
+        let authService = AuthService(client: client)
+        let authManager = AuthManager(tokenStore: tokenStore, client: client, authService: authService)
         client.onUnauthorized = { [weak authManager] in
             authManager?.signOut()
         }
-        self.authService = AuthService(client: client)
+        self.authService = authService
         self.expenseService = ExpenseService(client: client)
         _authManager = StateObject(wrappedValue: authManager)
     }
@@ -55,7 +56,7 @@ struct SpendlyticsApp: App {
             .tint(SpendlyticsStyle.accent)
             .preferredColorScheme(.light)
             .task {
-                authManager.restoreSession()
+                await authManager.restoreSession()
             }
         }
         .modelContainer(sharedModelContainer)

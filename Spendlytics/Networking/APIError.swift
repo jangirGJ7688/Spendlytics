@@ -10,6 +10,11 @@ enum APIError: Error {
     case decoding
     case storage
 
+    var isUnauthorized: Bool {
+        if case .httpStatus(401) = self { return true }
+        return false
+    }
+
     var userMessage: String {
         switch self {
         case .invalidCredentials: return "Email or password is incorrect."
